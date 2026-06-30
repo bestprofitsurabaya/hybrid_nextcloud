@@ -1,0 +1,172 @@
+services:
+  db:
+    image: mariadb:10.11
+    container_name: nextcloud_db
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW --innodb-buffer-pool-size=512M
+    volumes:
+      - "/srv/nextcloud/mysql:/var/lib/mysql"
+      - "/srv/nextcloud/backups:/backups"
+    environment:
+      - MYSQL_ROOT_PASSWORD=nextcloud@bpfsby44
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=nextcloud@bpfsby44
+    restart: unless-stopped
+    networks:
+      - nextcloud_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis:alpine
+    container_name: nextcloud_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - "/srv/nextcloud/redis:/data"
+    restart: unless-stopped
+    networks:
+      - nextcloud_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  nextcloud:
+    image: nextcloud:33.0.3
+    container_name: nextcloud_app
+    volumes:
+      - "/srv/nextcloud/data:/var/www/html"
+      - "/home/it-ef/hybrid_nextcloud/ssl:/etc/ssl/private:ro"
+      - "/home/it-ef/hybrid_nextcloud/letsencrypt:/etc/letsencrypt:ro"
+    environment:
+      - NEXTCLOUD_TRUSTED_DOMAINS=nasbpfsby.duckdns.org 192.168.2.26 172.60.199.23 localhost
+      - NEXTCLOUD_OVERWRITEPROTOCOL=https
+      - NEXTCLOUD_OVERWRITEHOST=nasbpfsby.duckdns.org
+      - NEXTCLOUD_OVERWRITECLIURL=https://nasbpfsby.duckdns.org
+      - TRUSTED_PROXIES=192.168.2.0/23 172.60.199.0/24 172.17.0.0/16 172.20.0.0/16
+      - MYSQL_HOST=db
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=nextcloud@bpfsby44
+      - REDIS_HOST=redis
+      - PHP_MEMORY_LIMIT=2048M
+      - UPLOAD_MAX_FILESIZE=50G
+      - POST_MAX_SIZE=20G
+      - MAX_EXECUTION_TIME=7200
+      - DEFAULT_PHONE_REGION=ID
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - nextcloud_net
+  cron:
+    image: nextcloud:33.0.3
+    container_name: nextcloud_cron
+    restart: unless-stopped
+    volumes:
+      - "/srv/nextcloud/data:/var/www/html"
+    entrypoint: /cron.sh
+    depends_on:
+      - db
+      - redis
+    networks:
+      - nextcloud_net
+
+  nginx:
+    image: nginx:alpine
+    container_name: nextcloud_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+      - "5000:5000"
+    volumes:
+      - "/home/it-ef/hybrid_nextcloud/nginx/nginx.conf:/etc/nginx/nginx.conf:ro"
+      - "/home/it-ef/hybrid_nextcloud/nginx/conf.d:/etc/nginx/conf.d:ro"
+      - "/home/it-ef/hybrid_nextcloud/ssl:/etc/ssl/private:ro"
+      - "/home/it-ef/hybrid_nextcloud/letsencrypt:/etc/letsencrypt:ro"
+      - "/srv/nextcloud/data:/var/www/html:ro"
+    depends_on:
+      - nextcloud
+    restart: unless-stopped
+    networks:
+      nextcloud_net:                  # <--- UBAH formatnya menjadi seperti ini
+        aliases:                      # <--- TAMBAHKAN baris ini
+          - nasbpfsby.duckdns.org     # <--- TAMBAHKAN baris ini
+
+  certbot:
+    image: certbot/certbot
+    container_name: nextcloud_certbot
+    volumes:
+      - "/home/it-ef/hybrid_nextcloud/letsencrypt:/etc/letsencrypt"
+      - "/srv/nextcloud/data:/var/www/html"
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do sleep 12h & wait $${!}; done;'"
+    depends_on:
+      - nginx
+    restart: unless-stopped
+    networks:
+      - nextcloud_net
+
+  collabora:
+    image: collabora/code:latest
+    container_name: nextcloud_collabora
+    shm_size: '1gb'
+    environment:
+      - aliasgroup1=https://nasbpfsby.duckdns.org:443
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=true --o:logging.level=warning
+      - username=admin
+      - password=admin123
+      - dictionaries=en_US id
+      - DONT_GEN_SSL_CERT=true
+    cap_add:
+      - MKNOD
+      - SYS_ADMIN  # Tambahkan ini untuk permission mount
+      - DAC_OVERRIDE  # Tambahkan ini
+    security_opt:
+      - apparmor:unconfined  # Untuk mengatasi permission issues
+    volumes:
+      - "/srv/nextcloud/collabora:/opt/cool/data"
+      - "/srv/nextcloud/collabora/jails:/opt/cool/jails"  # Tambahkan untuk jails
+    restart: unless-stopped
+    networks:
+      - nextcloud_net
+
+  talk-hpb:
+    image: ghcr.io/nextcloud-releases/aio-talk:latest
+    container_name: nextcloud_talk_hpb
+    environment:
+      - NC_DOMAIN=nasbpfsby.duckdns.org
+      - TALK_HOST=nasbpfsby.duckdns.org
+      - TALK_PORT=3478
+      - TURN_SECRET=6fc7158283baa33fbe67594bc5b647e4e3f81771c58c47dd462dd8252e90260c
+      - SIGNALING_SECRET=1ded2739745e6db1e79265abb71f6d4d4e59241d654ac772a35bf8a4570d7fb7
+      - INTERNAL_SECRET=f9c25762f802205c00bcfac1b52fcf7ec47fa5a4bf12c6960b32e7e50f21065e
+      - TZ=Asia/Jakarta
+      - JANUS_API_KEY=superSecretKey
+      - ALLOW_LIST=0.0.0.0/0
+      - SIGNALING_DEBUG=false  # Untuk debugging sementara
+      - SSL_CERT_FILE=/etc/letsencrypt/live/nasbpfsby.duckdns.org/fullchain.pem  # <--- TAMBAHKAN BARIS INI
+    volumes:
+      - "/home/it-ef/hybrid_nextcloud/letsencrypt:/etc/letsencrypt:ro"
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "8081:8081/tcp"  # Untuk testing langsung
+    restart: unless-stopped
+    networks:
+      - nextcloud_net
+      
+networks:
+  nextcloud_net:
+    name: nextcloud_net
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16

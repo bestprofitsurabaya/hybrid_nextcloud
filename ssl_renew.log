@@ -1,0 +1,11 @@
+[1;33m?? Starting SSL Renewal Process...[0m
+[0;34m?? Updating DuckDNS IP...[0m
+/home/it-ef/hybrid_nextcloud/maintenance.sh: line 56: /var/log/duckdns.log: Permission denied
+/home/it-ef/hybrid_nextcloud/maintenance.sh: line 57: /var/log/duckdns.log: Permission denied
+/home/it-ef/hybrid_nextcloud/maintenance.sh: line 58: /var/log/duckdns.log: Permission denied
+[0;32m? DuckDNS IP updated[0m
+[0;34m?? Renewing SSL certificate...[0m
+/home/it-ef/hybrid_nextcloud/maintenance.sh: line 68: docker-compose: command not found
+[0;34m?? Reloading Nginx...[0m
+/home/it-ef/hybrid_nextcloud/maintenance.sh: line 71: docker-compose: command not found
+[0;32m? Certificate renewal and webserver reload completed[0m
