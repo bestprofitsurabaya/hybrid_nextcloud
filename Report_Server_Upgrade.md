@@ -4,6 +4,8 @@
 **Objek:** `NAS` — 192.168.2.31:22 (path kantor), alt `nasbpfsby.duckdns.org:2211`
 **Metode:** SSH langsung ke host, pembacaan `dmidecode`, `/proc`, `smartctl`, `docker`, `ip`, `lsscsi`
 **Status:** Server produksi aktif, uptime 3 hari 7 jam, 24 container berjalan
+**Update 5 November 2026:** BIOS sudah di-upgrade **1.3.1 → 2.8.0 → 2.10.0** dan diverifikasi
+pasca-reboot; prosedur & bukti ada di **§8**.
 
 ---
 
@@ -11,7 +13,7 @@
 
 | Aspek | Kondisi | Status |
 |---|---|---|
-| Platform | Dell PowerEdge R210 II, BIOS 2011 | 🔴 Habis masa, tidak bisa dikembangkan |
+| Platform | Dell PowerEdge R210 II, BIOS **2.10.0 (2018)** — sebelum 5-Nov-2026 masih 1.3.1 | 🔴 Habis masa, tidak bisa dikembangkan |
 | CPU | Xeon E3-1220 4C/4T (2011) | 🟡 Cukup untuk beban sekarang, tapi tanpa HT |
 | RAM | 3,9 GB untuk 24 container | 🔴 **Bottleneck utama** — swap terpakai 1,78 GB |
 | Storage | 3 disk tunggal, **tanpa RAID** | 🔴 **Nol redundansi** |
@@ -44,7 +46,7 @@ yang sudah dipakai sekarang, ditambah **4× 8 TB RAIDZ1**. Anggaran ±**Rp33–3
 | Service Tag | `9B6HC2S` |
 | Mainboard | Dell `09T7VV`, rev `A05` |
 | Chassis | Dell PowerEdge R210 II |
-| BIOS | **Versi 1.3.1, rilis 10 November 2011** (belum pernah di-update) |
+| BIOS | **Versi 2.10.0, rilis 24 Mei 2018** — di-flash 5 November 2026 via DUP Dell `69VFP` (sebelumnya 1.3.1, 10-Nov-2011). Bukti: `dmidecode` `2.10.0` / `05/24/2018`, microcode `0x2f` |
 
 ### 1.2 Prosesor
 
@@ -205,7 +207,7 @@ di atas drive ini bukan solusi yang benar.
 
 | Keterbatasan | Dampak |
 |---|---|
-| BIOS 1.3.1 (2011) | Tanpa microcode keamanan modern; upgrade CPU v2 butuh update BIOS |
+| BIOS **2.10.0** (2018, sudah terpasang) | Microcode Spectre/Meltdown sudah masuk, tapi platform tetap EOL dan **tanpa recovery BIOS** |
 | DDR3-1333, maks 32 GB | Jalur memori lambat, tidak bisa dilanjutkan |
 | Hanya 2 bay 3,5" | Tidak bisa menampung 4+ disk untuk RAID yang layak |
 | Tanpa M.2/NVMe | Docker & database selalu berebut IOPS dengan HDD |
@@ -230,8 +232,8 @@ Penting:
 - **Wajib UDIMM (unbuffered) ECC** — R210 II **tidak** menerima RDIMM/Registered.
 - E3-1220 v1 secara resmi DDR3-1333; stick 1600 akan downclock otomatis (aman, dan bisa
   dipindah ke mesin lain kelak).
-- Sekalian: update BIOS ke rilis 2.x terakhir, perbaiki `eno2` (kabel Cat5e/port switch),
-  pindahkan `opencode`/Chrome keluar dari host.
+- ~~Update BIOS ke rilis 2.x terakhir~~ → **selesai 5-Nov-2026 (2.10.0, §8)**; sisa: perbaiki `eno2`
+  (kabel Cat5e/port switch), pindahkan `opencode`/Chrome keluar dari host.
 
 Hasil: swap hilang, 24 container lega. **Tetap tanpa redundansi, tanpa backup, kapasitas 84%.**
 
@@ -293,7 +295,7 @@ tetap dipakai?* Semua angka di bawah adalah **plafon keras platform**, bukan pil
 
 | Komponen | Sekarang | Maksimum yang mungkin | Part konkret | Perkiraan biaya | Batas yang tak bisa dilewati |
 |---|---|---|---|---|---|
-| **BIOS** | **1.3.1 (10-Nov-2011)** | **2.10.0 (16 Jul 2018)** | Dell DUP `69vfp` / ISO bootable | Rp0 | Wajib naik sebelum CPU v2; **tanpa dual-BIOS** — gagal flash = board mati |
+| **BIOS** | **2.10.0 (24-Mei-2018)** ✅ di-flash 5-Nov-2026 | **2.10.0** — versi terakhir yang ada | Dell DUP `69VFP` (Linux) | Rp0 — **selesai** | Syarat CPU v2 (≥ 2.0.5) sudah terpenuhi; **tanpa dual-BIOS** — gagal flash = board mati |
 | **CPU** | Xeon E3-1220 (4C/**4T**, 3,1–3,4 GHz, 80 W) | **Xeon E3-1290 v2** (4C/**8T**, 3,7 GHz, 80 W) | atau **E3-1270 v2** (4C/8T, 3,5 GHz, **69 W**) — nilai terbaik | E3-1270 v2: **Rp550 rb–880 rb** (bekas Lazada/Shopee); Rp2,1 jt untuk unit bergaransi toko | 1 socket, LGA1155; resmi hanya sampai E3-1200 **v2** (Ivy Bridge) |
 | **RAM** | 3,9 GB (2×2 GB DDR3-1333) | **32 GB** (4× 8 GB DDR3-**1600** ECC UDIMM) | Samsung `M391B1G73BH0-YH9`, Hynix `HMT41GU7AFR8A-PB` | Rp2,0–3,8 jt (Rp500–955 rb/stick) | Hanya **UDIMM** (bukan RDIMM); 4 slot, 32 GB |
 | **Storage internal** | 3 disk 3,5" (1 di luar bay) | **2× 3,5" di bay + 1–2 SSD SATA** di area ODD | 2× 8 TB WD Red Plus + SSD 500 GB | Rp8,2–9,2 jt + Rp0,6 jt | Chassis 1U: hanya **2 bay 3,5"**; **tidak ada M.2/NVMe boot** |
@@ -317,7 +319,7 @@ sekalian 2× 8 TB RAID1 + SSD.
 | Tanpa NVMe boot | Docker/DB selalu di HDD atau SATA SSD |
 | 1 slot PCIe 25 W | HBA **atau** NIC 2,5 GbE, tidak keduanya |
 | DDR3-1600 | Bandwidth & efisiensi daya era 2012 |
-| BIOS 2011 → 2.10.0 | Patch Spectre/Meltdown, tapi tetap EOL |
+| BIOS 2.10.0 (2018) | Spectre/Meltdown sudah dipatch, tapi tetap EOL |
 | 80 W TDP, fan 40 mm | Konsumsi & kebisingan tidak turun |
 
 **Putusan:** Skenario D **masuk akal hanya** sebagai jembatan bila anggaran < Rp7 jt dan pembelian
@@ -325,9 +327,11 @@ disk ditunda — dan sudah 40–45% dari biaya Skenario B tanpa keunggulan platf
 Bila R210 II dipakai ulang sebagai **server backup** (§4 langkah 5), cukup RAM 32 GB saja;
 CPU v2 tidak diperlukan karena beban backup ringan.
 
-> ⚠️ Risiko flashing BIOS: 1.3.1 → 2.10.0 harus lewat DUP Linux atau ISO bootable, dan board ini
-> tidak punya BIOS cadangan. Siapkan UPS dan catat Service Tag `9B6HC2S`. Bila hanya ingin
-> perbaikan memori, **lewati langkah BIOS + CPU** dan cukup pasang 32 GB RAM.
+> ✅ **Update 5-Nov-2026:** langkah BIOS sudah dieksekusi — 1.3.1 → 2.8.0 → 2.10.0 lewat DUP Linux
+> Dell, dua reboot terkontrol, board kembali normal (§8). Risiko yang sama tetap berlaku untuk
+> setiap flash berikutnya: board ini **tidak punya BIOS cadangan** (`BIOS recovery after bad
+> flash: not supported`, *R210 II Technical Guide* §9). Siapkan UPS dan catat Service Tag
+> `9B6HC2S`. Bila hanya ingin perbaikan memori, langkah CPU tetap opsional dan cukup pasang 32 GB RAM.
 
 ## 4. Rencana Migrasi (urutan wajib)
 
@@ -358,6 +362,7 @@ CPU v2 tidak diperlukan karena beban backup ringan.
 | 5 | Migrasi data & jadikan R210 II backup server | Rp0 | 🔴 Menutup celah backup |
 | 6 | Konversi karaoke NTFS → ext4/XFS, pasang UPS | Rp0–1,5 jt | 🟡 Keandalan |
 | 7 | Pindahkan `opencode`/Chrome dari host NAS | Rp0 | 🟡 ±170 MB RAM |
+| 8 | ~~Upgrade BIOS 1.3.1 → 2.10.0~~ | Rp0 | ✅ **Selesai 5-Nov-2026** (§8) |
 
 ---
 
@@ -406,4 +411,84 @@ crontab -l
 - Kapasitas RAM maksimum 32 GB mengikuti `dmidecode` tipe 16 (4 device); sebagian forum
   melaporkan R210 II bisa 32 GB dengan 4× 8 GB — tidak diuji di mesin ini.
 - Dukungan CPU E3-1200 **v2** (Ivy Bridge) dan BIOS **2.10.0** mengacu pada *Dell R210 II Technical Guide* serta halaman driver Dell; **belum diuji pada unit ini** (BIOS masih 1.3.1).
-- Audit bersifat read-only: **tidak ada perubahan konfigurasi atau data pada NAS.**
+- Audit awal (3-Nov-2026) bersifat **read-only**. Satu perubahan susulan dieksekusi **5-Nov-2026**:
+  upgrade BIOS ke 2.10.0 (§8) — tidak ada data pengguna maupun konfigurasi layanan yang diubah.
+
+---
+
+## 8. Log Pelaksanaan — Upgrade BIOS 1.3.1 → 2.10.0 (5 November 2026)
+
+**Target:** Dell `69VFP` — *PowerEdge R210 II BIOS 2.10.0*, rilis 16 Jul 2018, status **Urgent /
+Latest / Recommended** (CVE-2018-3639 & CVE-2018-3640, microcode E3-1200 v2 E1 `0x20`, E3-1200 D2 `0x2E`).
+
+### 8.1 Hasil
+
+| Item | Sebelum | Sesudah |
+|---|---|---|
+| BIOS | 1.3.1 (10-11-2011) | **2.10.0 (24-05-2018)** |
+| Microcode CPU (E3-1220, D2 stepping) | patch lama | **`0x2f`** |
+| Reboot | uptime 5 hari 7 jam | 2× reboot terkontrol (±2–4 menit) |
+| Container | 25 berjalan | 25 berjalan, semua `healthy` |
+| Lock DUP | ada sisa `/var/lock/.spsetup` | bersih, tidak ada proses menggantung |
+| Layanan | — | `:443` → 302, `:8443` → 200, `:80` → 301 |
+
+Verifikasi pasca-flash:
+
+```
+$ sudo dmidecode -s bios-version        → 2.10.0
+$ sudo dmidecode -s bios-release-date   → 05/24/2018
+$ sudo dmidecode -s system-product-name → PowerEdge R210 II
+$ grep -m1 microcode /proc/cpuinfo      → 0x2f
+```
+
+### 8.2 Integritas paket
+
+Diunduh dari CDN Dell asli, checksum diverifikasi **dua kali** (lokal + di NAS) dan sama persis
+dengan nilai di halaman driver:
+
+| Paket | Driver ID | SHA-256 |
+|---|---|---|
+| `R210-II_BIOS_69VFP_LN_2.10.0.BIN` | `69VFP` | `2a3affecba3cd10fcfc91d181688f892a8f2efc339393b4f6489639e9d9f6d10` |
+| `R210-II_BIOS_VXJ66_LN_2.8.0.BIN` | `VXJ66` | `6ad0cc13a0115c0db399c1aa99a355a8eb09601bd65498f1470bd906b8b8d9f5` |
+
+Keduanya disimpan di `~/bios/` pada NAS beserta `.sign`. Tarik ulang dengan `curl` biasa akan
+kena blokir Akamai (403); sertakan header browser lengkap (`-A`, `Accept`, `Sec-Fetch-*`) atau
+unduh lewat browser.
+
+### 8.3 Mengapa bertahap lewat 2.8.0, bukan 2.1.2
+
+- Release notes Dell (2.4.3 & 2.8.0) menyebut prasyarat "harus lewat 2.1.2" **hanya untuk jalur
+  USC**: *"In order to flash to BIOS version 2.2.3 or newer using USC, you must first flash to
+  BIOS version 2.1.2 … Other BIOS update methods do not have this prerequisite."* → DUP Linux
+  tidak wajib lewat 2.1.2.
+- Walau begitu, paket 2.1.2 hanya tersedia sebagai **`LN32` (32-bit)** dan menuntut `rpm` +
+  loader i386 — tidak ada di Debian 13 dan sengaja **tidak** dipasang di server produksi.
+- Jembatan yang dipakai: **2.8.0 (`VXJ66`, 64-bit, 2014)** — terekstrak bersih dan lolos validasi
+  DUP di Debian 13.
+
+### 8.4 Prosedur yang dipakai
+
+```bash
+# dari ~/bios di NAS, sesi harus punya TTY (ssh -tt)
+sudo ./R210-II_BIOS_VXJ66_LN_2.8.0.BIN -q     # 1.3.1 → 2.8.0, FLASH_RC=2
+sudo reboot                                    # verifikasi: BIOS 2.8.0
+sudo ./R210-II_BIOS_69VFP_LN_2.10.0.BIN -q     # 2.8.0 → 2.10.0, FLASH_RC=2
+sudo reboot                                    # verifikasi: BIOS 2.10.0
+```
+
+Catatan operasional:
+
+- DUP generasi 11G akan `exec xterm` bila dijalankan tanpa TTY — pakai `ssh -tt`.
+- `FLASH_RC=2` = **sukses, perlu restart**; BIOS baru aktif setelah reboot.
+- `-q` tanpa `-r` = flash tanpa reboot otomatis, sehingga downtime bisa dijadwalkan terpisah.
+- Bila DUP terhenti di tengah jalan, hapus `/var/lock/.spsetup` sebelum mengulang.
+- Flash butuh **memori fisik bebas** ≥ ukuran image (8 MB) — saat eksekusi tersedia ±1,5 GB.
+
+### 8.5 Sisa pekerjaan terkait
+
+- **BMC/iDRAC6 belum disentuh.** Untuk memasang Xeon E3-1200 **v2** Dell mensyaratkan BIOS ≥ 2.0.5
+  (✅ terpenuhi) **dan BMC ≥ 1.85** (belum diverifikasi/di-upgrade).
+- Opsi **Signed BIOS Update** (NIST SP800-147, tersedia sejak 2.2.3) belum diaktifkan; bila
+  diaktifkan, downgrade ke versi lama akan diblokir.
+- Manajemen out-of-band belum siap: `/dev/ipmi0` tidak ada, `ipmitool`/`racadm` tidak terpasang,
+  dan iDRAC6 masih generasi Java/legacy.
