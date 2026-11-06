@@ -6,9 +6,9 @@
 | **Objek** | `NAS` — Dell PowerEdge R210 II, Service Tag `9B6HC2S` |
 | **Akses** | `192.168.2.31:22` (LAN kantor), alternatif `nasbpfsby.duckdns.org:2211` |
 | **Audit awal** | 3 November 2026, 16:29–16:5x WIB (read-only) |
-| **Pelaksanaan** | 5–6 November 2026 — BIOS **selesai**; BMC/iDRAC6 **dalam proses** (menunggu konfirmasi kartu) |
+| **Pelaksanaan** | 5–6 November 2026 — BIOS **selesai**; BMC in-band 1.80 (kartu iDRAC6 **tidak terpasang**) — OOB **tidak tersedia** |
 | **Status server** | Produksi aktif, 25 container berjalan, 0 `unhealthy` |
-| **Revisi dokumen** | v8 — 6 November 2026 (layanan iDRAC mati permanen; perbaikan harus fisik, jalur flash software tertutup) |
+| **Revisi dokumen** | v9 — 6 November 2026 (verifikasi fisik: **kartu iDRAC6 Express tidak terpasang**; klaim OOB v5–v8 dicabut, rencana flashing pindah ke jalur in-band/DOS) |
 
 ## Daftar Isi
 
@@ -32,7 +32,7 @@
 | Aspek | Kondisi | Status |
 |---|---|---|
 | Platform | Dell PowerEdge R210 II, BIOS **2.10.0 (2018)** — terpasang 5-Nov-2026 | 🔴 EOL, tidak bisa dikembangkan |
-| Manajemen OOB | iDRAC6 Express, BMC **1.80**, `192.168.2.28` (static) — hanya ICMP yang menjawab | 🟡 Layanan iDRAC (web/SSH/RMCP+) mati; perlu AC power cycle (§7.2g) |
+| Manajemen OOB | **Tidak ada** — kartu iDRAC6 Express **tidak terpasang**; hanya BMC dasar in-band (fw **1.80**, `ipmitool` + `/dev/ipmi0`) | 🔴 Tanpa web/SSH/RMCP+/SOL/virtual media/power control; semua perbaikan harus fisik (§7.2h) |
 | CPU | Xeon E3-1220 4C/4T (2011) | 🟡 Cukup untuk beban sekarang, tanpa HT |
 | RAM | 3,9 GB untuk 25 container | 🔴 **Bottleneck utama** — swap terpakai 1,78 GB |
 | Storage | 3 disk tunggal, **tanpa RAID** | 🔴 **Nol redundansi** |
@@ -56,9 +56,9 @@ dipakai sekarang, ditambah **4× 8 TB RAIDZ1**. Anggaran ±**Rp33–37 juta**.
 | Pekerjaan | Status | Bukti / catatan |
 |---|---|---|
 | Upgrade BIOS 1.3.1 → 2.8.0 → 2.10.0 | ✅ Selesai 5-Nov-2026 | §7.1 — `dmidecode` 2.10.0, microcode `0x2f` |
-| Pemeriksaan & persiapan BMC/iDRAC6 → ≥ 1.85 | ✅ Selesai 6-Nov-2026 | §7.2e–f — kartu Express ada, `iDRAC6 LAN` + `IPMI Over LAN` On, DHCP jalan |
-| Akses OOB (ping/web/RMCP+) | 🔴 ICMP hidup, layanan mati | §7.2g — ping 14/14 dari laptop/WSL, tetapi TCP 80/443/22/5900 ditolak dan RMCP+ bisu |
-| Flash BMC 1.85 → 2.92 | ⏳ Siap dijalankan | Web UI hidup; paket + checksum siap (§7.3 Langkah 2) |
+| Pemeriksaan BMC/iDRAC6 → ≥ 1.85 | 🔴 Terblokir — kartu tidak ada | §7.2h — verifikasi fisik 6-Nov-2026: slot kartu iDRAC6 Express kosong; BMC 1.80 hanya in-band |
+| Akses OOB (web/RMCP+/SOL) | 🔴 Tidak tersedia | §7.2h — tanpa kartu tidak ada layanan iDRAC; ICMP `.27/.28` di §7.2f–g terbukti bukan iDRAC (MAC `d0:67:e5:f4:0a:66` tak pernah muncul) |
+| Flash BMC 1.85 → 2.92 | ⏳ Hanya jalur in-band/DOS | Web UI tidak ada; paket + checksum siap; prosedur §7.3 Langkah 2b |
 | RAM 32 GB, backup, NAS baru | ⏳ Belum dimulai | §5, §6 |
 
 ---
@@ -103,7 +103,7 @@ pembacaan BMC in-band lewat `ipmitool` + `/dev/ipmi0` (KCS). Seluruh audit awal 
 | Service Tag | `9B6HC2S` |
 | Mainboard | Dell `09T7VV`, rev `A05` |
 | BIOS | **2.10.0, rilis 24 Mei 2018** — di-flash 5-Nov-2026 via DUP Dell `69VFP` (sebelumnya 1.3.1, 10-Nov-2011). Bukti: `dmidecode` `2.10.0` / `05/24/2018`, microcode `0x2f` |
-| BMC / iDRAC6 | **iDRAC6 Express terpasang & online**, firmware 1.80, IPMI 2.0, Device ID 32, MAC `d0:67:e5:f4:0a:66`. NIC mode `shared with failover lom2`, IP `192.168.2.27` (DHCP) — hanya dapat dijangkau dari host lain (§7.2f) |
+| BMC / iDRAC6 | **BMC dasar baseboard (WPCM450)**, firmware 1.80, IPMI 2.0, Device ID 32 — terbaca in-band lewat `/dev/ipmi0` (KCS). **Kartu iDRAC6 Express TIDAK terpasang** (verifikasi fisik 6-Nov-2026) → tanpa web UI, SSH/RMCP+ LAN, SOL, dan virtual media. MAC `d0:67:e5:f4:0a:66` hanya alokasi MAC LOM, tidak ada antarmuka manajemen yang aktif (§7.2h) |
 
 ### 3.2 Prosesor
 
@@ -196,10 +196,10 @@ NIC: **Broadcom NetXtreme II BCM5716** (2 port GbE). Tidak ada 2,5 GbE / 10 GbE 
 Port publik terbuka: 22, 80, 443, 3478 (TURN), 5000, 8443, 8444, 8445, 8446.
 Port lokal: 3001, 3307, 5001, 43741, 49374.
 
-> Catatan BMC: modul **Express terkonfirmasi terpasang** dan **online** (6-Nov-2026) tetapi tidak
-> punya port dedicated; jalurnya NIC *shared* di LOM1, sehingga BMC hanya bisa dijangkau dari host
-> lain di LAN — bukan dari server itu sendiri (§7.2f).
-> MAC `d0:67:e5:f4:0a:66` saat ini tidak terlihat di segmen mana pun (§7.2).
+> Catatan BMC: kartu **iDRAC6 Express tidak terpasang** (verifikasi fisik 6-Nov-2026), jadi tidak ada
+> antarmuka jaringan manajemen sama sekali. MAC `d0:67:e5:f4:0a:66` tidak pernah terlihat di segmen;
+> ICMP yang sempat dianggap “iDRAC” pada §7.2f–g berasal dari perangkat lain atau dari pengujian yang
+> tidak sah — lihat §7.2h.
 
 ### 3.7 Beban kerja (25 container)
 
@@ -275,12 +275,15 @@ bukan solusi yang benar.
 Catatan jujur: penghematan listrik dengan N100 hanya ±Rp50–75 rb/bulan — **bukan** alasan utama
 upgrade. Alasan utamanya adalah RAM, redundansi, dan kapasitas.
 
-### 4.5 Bottleneck #5 — Manajemen out-of-band tidak siap
+### 4.5 Bottleneck #5 — Manajemen out-of-band tidak ada
 
-- BMC/iDRAC6 masih **1.80** (syarat CPU E3-1200 v2: ≥ 1.85).
-- NIC iDRAC tidak muncul di jaringan meski kanal LAN sudah diaktifkan (§7.2) → belum bisa dipakai
-  untuk flashing jarak jauh maupun pemantauan hardware.
-- `racadm`/OMSA tidak terpasang; manajemen hanya bisa in-band lewat `ipmitool` (KCS).
+- **Kartu iDRAC6 Express tidak terpasang** (verifikasi fisik 6-Nov-2026, §7.2h) → tidak ada web UI,
+  SSH/RMCP+ over LAN, SOL/remote console, virtual media, maupun remote power control.
+- Yang tersisa hanya BMC dasar **1.80** lewat KCS in-band (`/dev/ipmi0`, perlu root) — cukup untuk
+  `mc info`, sensor, dan SEL, tetapi tidak untuk akses dari jaringan.
+- BMC 1.80 juga di bawah syarat Dell untuk CPU E3-1200 v2 (≥ 1.85); flashing hanya lewat jalur
+  in-band/DOS, bukan web.
+- `racadm`/OMSA tidak terpasang.
 
 ---
 
@@ -357,13 +360,13 @@ dipakai?* Semua angka di bawah adalah **plafon keras platform**, bukan pilihan b
 | Komponen | Sekarang | Maksimum yang mungkin | Part konkret | Perkiraan biaya | Batas yang tak bisa dilewati |
 |---|---|---|---|---|---|
 | **BIOS** | **2.10.0 (24-Mei-2018)** ✅ di-flash 5-Nov-2026 | **2.10.0** — versi terakhir yang ada | Dell DUP `69VFP` (Linux) | Rp0 — **selesai** | Syarat CPU v2 (≥ 2.0.5) sudah terpenuhi; **tanpa dual-BIOS** — gagal flash = board mati |
-| **BMC/iDRAC6** | **1.80** (iDRAC6 Express terpasang, NIC shared) | **2.92** (terakhir, 2019) — minimum praktis 1.85 | `iDRAC6_1.85_A00_FW_IMG.exe` (`3VM7N`), `iDRAC6_2.92_A00_FW_IMG.exe` (`KPCCC`) | Rp0 | Firmware saja tidak menghidupkan NIC yang tak terhubung; tanpa upgrade, CPU v2 **tidak didukung resmi** |
+| **BMC/iDRAC6** | **1.80**, **tanpa kartu Express** (hanya in-band) | **2.92** (terakhir, 2019) — minimum praktis 1.85 | `iDRAC6_1.85_A00_FW_IMG.exe` (`3VM7N`), `iDRAC6_2.92_A00_FW_IMG.exe` (`KPCCC`) | Rp0 | Tanpa kartu tidak ada web UI; upgrade hanya via DUP in-band / media DOS. Tanpa upgrade, CPU v2 **tidak didukung resmi** |
 | **CPU** | Xeon E3-1220 (4C/**4T**, 3,1–3,4 GHz, 80 W) | **Xeon E3-1290 v2** (4C/**8T**, 3,7 GHz, 80 W) | atau **E3-1270 v2** (4C/8T, 3,5 GHz, **69 W**) — nilai terbaik | E3-1270 v2: **Rp550 rb–880 rb** (bekas); Rp2,1 jt unit bergaransi toko | 1 socket, LGA1155; resmi hanya sampai E3-1200 **v2** (Ivy Bridge) |
 | **RAM** | 3,9 GB (2×2 GB DDR3-1333) | **32 GB** (4× 8 GB DDR3-**1600** ECC UDIMM) | Samsung `M391B1G73BH0-YH9`, Hynix `HMT41GU7AFR8A-PB` | Rp2,0–3,8 jt (Rp500–955 rb/stick) | Hanya **UDIMM** (bukan RDIMM); 4 slot, 32 GB |
 | **Storage internal** | 3 disk 3,5" (1 di luar bay) | **2× 3,5" di bay + 1–2 SSD SATA** di area ODD | 2× 8 TB WD Red Plus + SSD 500 GB | Rp8,2–9,2 jt + Rp0,6 jt | Chassis 1U: hanya **2 bay 3,5"**; **tidak ada M.2/NVMe boot** |
 | **Ekspansi** | slot PCIe kosong | **1× PCIe x16 Gen2, half-length, maks 25 W** | HBA SATA ASM1166/JMB585 **atau** NIC 2,5 GbE i226 — **pilih satu** | Rp250–600 rb | Satu slot saja; tidak bisa HBA + NIC sekaligus |
 | **Jaringan** | 1× GbE (eno1), 1× 100 Mb (eno2) | tetap **2× GbE** (BCM5716 onboard) | — | Rp0 | Tanpa 2,5/10 GbE kecuali slot PCIe dikorbankan |
-| **Manajemen** | iDRAC6 Express (Matrox G200eW/WPCM450) | sama, + firmware terbaru | — | Rp0 | Generasi iDRAC6 (Java/legacy) |
+| **Manajemen** | **tanpa kartu**; hanya BMC in-band (Matrox G200eW/WPCM450) | + firmware 2.92 (in-band), atau tambahkan kartu iDRAC6 Express/Enterprise | kartu Express/Enterprise (bekas) | cek pasar bekas | Generasi iDRAC6 (Java/legacy); tanpa kartu tetap tanpa OOB |
 
 **Total jalur mentok:** CPU + RAM = **Rp2,6–5,9 jt** (tanpa disk) — atau **Rp11,4–15,7 jt** bila
 sekalian 2× 8 TB RAID1 + SSD.
@@ -498,14 +501,16 @@ Catatan operasional:
 BIOS ≥ 2.0.5 (✅ 2.10.0) **dan BMC ≥ 1.85** (belum). Jalur dipilih **bertahap** karena rilis Dell
 hanya mendokumentasikan upgrade dari versi tepat sebelumnya, dan unit ini memakai eMMC.
 
-**Status akhir (6-Nov-2026): iDRAC6 ONLINE, firmware masih 1.80.** BMC menjawab di `192.168.2.27`
-(ping 4/4 dari laptop), dengan `iDRAC6 LAN = On` dan `IPMI Over LAN = On`. Flashing 1.85 → 2.92 kini
-bisa dilakukan lewat web UI dan menjadi pekerjaan berikutnya (§7.3 Langkah 2).
+**Status akhir (6-Nov-2026, v9): OOB TIDAK ADA — kartu iDRAC6 Express tidak terpasang.** BMC dasar
+(baseboard) tetap hidup dan terbaca in-band dengan firmware **1.80**. Klaim “iDRAC6 online di
+`192.168.2.27`” pada §7.2f–g **dicabut** setelah verifikasi fisik oleh pemilik server (§7.2h).
+Flashing 1.85 → 2.92 tidak lagi punya jalur web UI; hanya in-band/DOS (§7.3 Langkah 2b).
 
-> Dua koreksi berturut-turut selama diagnosis: **v4** menyimpulkan modul Express kemungkinan tidak
-> terpasang (**salah** — kartu ada, terbukti via F10 dan `Active LOM = LOM1`); **v5** menyimpulkan
-> jalur NC-SI gagal (**juga salah** — semua uji dilakukan dari host yang, pada NIC shared, memang
-> tidak bisa menjangkau BMC-nya sendiri; lihat §7.2f).
+> Tiga koreksi berturut-turut selama diagnosis: **v4** menyimpulkan modul Express tidak terpasang
+> (**benar**, dan dipulihkan di v9); **v5–v6** menyimpulkan kartu ada dan iDRAC online (**salah** —
+> F10/USC dan `Active LOM = LOM1` juga ada pada unit tanpa kartu, dan ICMP di `.27` bukan dari
+> iDRAC); **v7–v8** menyimpulkan “layanan iDRAC mati permanen” (**juga salah** — tidak ada layanan
+> iDRAC yang bisa mati karena kartunya memang tidak ada).
 
 #### a. Temuan firmware & paket
 
@@ -568,7 +573,7 @@ BMC ternyata online; `tcpdump` di host memang tidak dapat melihat lalu lintas NC
 Dampak ke produksi: **nol**. `mc reset cold` hanya mereset iDRAC, bukan host — uptime host tetap,
 25 container berjalan, 0 `unhealthy`.
 
-#### e. Pemeriksaan ulang 6 November 2026 — kartu Express ADA; uji dari host tidak sah
+#### e. (DICABUT §7.2h) pemeriksaan ulang 6 November 2026 — klaim “kartu Express ADA”
 
 Tindakan di sisi server: BMC di-reset, kanal LAN diaktifkan, IP diset **DHCP**, lalu lewat **Ctrl-E**
 NIC Selection diubah ke **`shared with failover lom2`** (VLAN disabled, IPv4 enabled, DHCP),
@@ -577,7 +582,7 @@ paket di **kedua** LOM.
 
 | Item | Hasil 6-Nov-2026 |
 |---|---|
-| Modul iDRAC6 Express | **ADA** — **F10** *System Services/USC* dapat diakses (di R210 II fitur ini hanya aktif lewat iDRAC6 Express); Ctrl-E menampilkan `Active LOM = LOM1` |
+| Modul iDRAC6 Express | ~~**ADA**~~ → **TIDAK ADA** (v9). F10/USC dasar dan `Active LOM = LOM1` berasal dari baseboard BMC dan **tidak** membuktikan kartu terpasang (§7.2h) |
 | BMC | responsif: `mc info` → Device ID 32, fw **1.80**, IPMI 2.0, Dell Inc. |
 | Interface host | KCS di I/O `0xca8`; dmesg: *"Found new BMC … IPMI kcs interface initialized"* |
 | Kanal LAN 1 | `channel info 1`: 802.3 LAN, `Access Mode: always available` (volatile & non-volatile); user `root` enabled, privilege ADMINISTRATOR |
@@ -591,10 +596,10 @@ Verifikasi jalur kabel: `eno1` = `0000:01:00.0` (LOM1, `bnx2`, link 1000 Mb full
 `0000:01:00.1` (LOM2, 100 Mb full). MAC host `d0:67:e5:f4:0a:64` / `…:0a:65`, MAC BMC `…:0a:66` —
 port dan kabel sudah benar, jadi ini bukan salah colok.
 
-**Koreksi penting.** Kesimpulan v4 ("Express kemungkinan tidak terpasang") **terbantah**. Bukti lama
-(nol paket, FRU hanya Builtin, SMBIOS tanpa entri iDRAC, mode *dedicated* tidak didukung) memang
-benar sebagai observasi, tetapi **bukan** bukti ketiadaan kartu — `fru list`/SMBIOS pada 11G tidak
-melaporkan modul Express, dan mode *dedicated* hanya ada pada Enterprise.
+**Koreksi (v9).** Kesimpulan v4 (“Express kemungkinan tidak terpasang”) ternyata **benar** dan
+dipulihkan setelah verifikasi fisik (§7.2h). Pencabutan di v5 keliru: F10/USC *dasar* dan
+`Active LOM = LOM1` juga tersedia pada unit **tanpa** kartu — Dell hanya mensyaratkan Express untuk
+fitur tambahan USC (update firmware, konfigurasi hardware), bukan untuk membuka menunya.
 
 Hipotesis yang sempat diuji berurutan: NC-SI belum ter-init, `IPMI Over LAN` mati, bug shared NIC
 1.80, dan mode *failover*. **Tidak satu pun menjadi penyebab** — `IPMI Over LAN` ternyata sudah `On`
@@ -604,7 +609,7 @@ Hipotesis yang sempat diuji berurutan: NC-SI belum ter-init, `IPMI Over LAN` mat
 dan itu titik uji yang salah pada NIC *shared*: frame yang dikirim host tidak pernah di-loopback ke
 jalur NC-SI, sehingga host **tidak akan pernah** bisa menjangkau BMC-nya sendiri. Lihat §7.2f.
 
-#### f. Hasil akhir 6 November 2026 — iDRAC6 online
+#### f. (DICABUT §7.2h) klaim “iDRAC6 online” dari uji laptop
 
 Uji penentu dijalankan dari **laptop Windows** di jaringan yang sama, bukan dari server:
 
@@ -637,15 +642,12 @@ sedangkan frame yang dikirim host tidak di-loopback ke jalur NC-SI. Akibatnya:
   pada §7.2c dan §7.2e **tidak sah**.
 - Verifikasi OOB harus dari perangkat lain di LAN (laptop/workstation), atau lewat counter switch.
 
-**Status.** iDRAC6 Express **aktif dan dapat dijangkau**: DHCP berjalan, web UI + RMCP+ tersedia di
-`192.168.2.27` (MAC `d0:67:e5:f4:0a:66`). Sensor, SEL, SOL, dan remote console kini bisa dipakai;
-satu-satunya risiko tersisa adalah firmware **1.80** (TLS 1.0, CVE-2019-3705) → lanjut §7.3
-Langkah 2.
+**Status (DICABUT v9).** ~~iDRAC6 Express aktif dan dapat dijangkau~~ — **tidak benar**. Kartu
+Express tidak terpasang, jadi tidak ada layanan iDRAC di alamat mana pun; ICMP 4/4 dari laptop ke
+`192.168.2.27` berasal dari perangkat lain, dan MAC `d0:67:e5:f4:0a:66` tidak pernah muncul di segmen.
+Uji ulang yang benar: `arp -a` di laptop + tabel FDB switch untuk melihat MAC pemilik `.27`.
 
-Catatan keamanan segera: ganti password `root` bila masih default, dan batasi akses BMC ke subnet
-manajemen sebelum menunda upgrade.
-
-#### g. 6 November 2026 (lanjutan) — ICMP hidup, semua layanan iDRAC mati
+#### g. (DICABUT §7.2h) asumsi “ICMP hidup = iDRAC hidup, layanannya mati”
 
 Setelah `iDRAC6 LAN = On` dan `IPMI Over LAN = On` dikonfirmasi, diuji ulang dari luar host
 (laptop, WSL, dan host ketiga yang ter-routing ke LAN):
@@ -656,7 +658,7 @@ Setelah `iDRAC6 LAN = On` dan `IPMI Over LAN = On` dikonfirmasi, diuji ulang dar
 | TCP 80, 443, 22, 5900 | **connection refused** (RST) di semua port |
 | RMCP+ *Get Channel Auth Capabilities*, UDP 623 | **tanpa balasan** |
 | `ipmitool mc reset cold` (in-band; host tidak reboot) | BMC kembali ± 105 s, fw tetap 1.80 — layanan tetap mati |
-| Pindah ke static `192.168.2.28` + cold reset | ICMP ikut pindah ke `.28` (3/3); `.27` mati → penjawab ping **adalah iDRAC**, bukan bentrok IP |
+| Pindah ke static `192.168.2.28` + cold reset | ICMP ikut pindah ke `.28` (3/3); `.27` mati — **bukan bukti iDRAC** (v9): tanpa kartu, penjawab harus diidentifikasi lewat MAC/ARP-FDB, bukan disimpulkan dari perilaku ping |
 | `ip neigh` host untuk alamat BMC | `FAILED` (normal: NC-SI tidak menjawab ARP dari host sendiri) |
 
 **Kesimpulan.** Stack jaringan/iDRAC Linux hidup (ARP+ICMP+DHCP/static berjalan), tetapi lapisan
@@ -705,11 +707,51 @@ IPv4 + DHCP, IP `0.0.0.0`, firmware **1.80**. Dampak produksi: **nol** — 25 co
 0 `unhealthy`, load normal. Catatan operasional: `/dev/ipmi0` hanya dapat dibuka root sehingga
 `ipmitool` perlu `sudo`.
 
+#### h. 6 November 2026 (malam) — verifikasi fisik: kartu iDRAC6 Express tidak terpasang
+
+Pemeriksaan langsung di chassis oleh pemilik server memastikan **slot kartu iDRAC6 Express kosong**:
+tidak ada modul manajemen terpasang. Ini konsisten dengan *spec sheet* R210 II — iDRAC6
+Express/Enterprise bersifat **opsional**, sedangkan yang standar hanyalah baseboard BMC + IPMI 2.0.
+Karena itu seluruh kesimpulan OOB di §7.2e–g dicabut, termasuk “layanan iDRAC mati permanen”.
+
+Bukti yang bisa diambil dari OS (tanpa membongkar chassis):
+
+| Cek | Hasil di mesin ini | Arti |
+|---|---|---|
+| `lspci -nn \| grep -iE 'vga\|bmc'` | hanya `02:03.0` Matrox G200eW (`WPCM450`) | tidak ada perangkat DRAC; BMC menempel di LPC `0000:00:1f.0` |
+| `ls /sys/class/ipmi/` | `ipmi0 → …/0000:00:1f.0/IPI0001:00` | KCS in-band aktif — memang baseboard BMC |
+| `ip -br link` | hanya `eno1`, `eno2` (+ bridge Docker) | tidak ada antarmuka jaringan manajemen |
+| `cat /sys/class/net/eno1/device/power/wakeup` | `disabled` | belum ada jalur power-on jarak jauh |
+| ARP/`ip neigh` untuk `.27`/`.28` | MAC `d0:67:e5:f4:0a:66` tidak pernah muncul | klaim §7.2f–g tidak punya identitas perangkat |
+
+**Konsekuensi yang berlaku sekarang:**
+
+1. **Tidak ada OOB sama sekali** — web UI, SSH/WRMCP+, SOL/remote console, virtual media, dan remote
+   power control tidak ada. `192.168.2.27`/`.28` **bukan** jalur manajemen dan jangan dipakai di
+   dokumen operasional mana pun.
+2. **ICMP di §7.2f–g harus diidentifikasi ulang.** Ambil `arp -a` di laptop dan tabel FDB switch:
+   bila MAC penjawab bukan `d0:67:e5:f4:0a:66`, alamat itu milik perangkat lain (AP/PC) dan seluruh
+   §7.2f–g gugur. `ipmitool lan set 1 ipaddr …` pada unit tanpa kartu tetap “berhasil” di level kanal
+   BMC, tetapi tidak ada NIC yang mengirim frame — konsisten dengan 0 paket pada §7.2c.
+3. **Firmware BMC 1.80 tetap perlu naik** bila CPU E3-1200 v2 mau dipasang (syarat Dell ≥ 1.85),
+   tetapi jalurnya bukan web UI: DUP `ESM_Firmware` in-band (butuh loader i386) atau media DOS/USB
+   (§7.3 Langkah 2b).
+4. **Mitigasi tanpa kartu:** aktifkan Wake-on-LAN (BIOS + `sudo ethtool -s eno1 wol g`, uji dari host
+   lain), pakai `sudo ipmitool` in-band untuk sensor/SEL, dan UPS untuk shutdown rapi. Semua pekerjaan
+   BIOS/firmware/console = **fisik**.
+
+**Bila OOB memang dibutuhkan:** pasang kartu **iDRAC6 Express** bekas (web UI, RMCP+, SOL; tetap
+generasi legacy — TLS 1.0 dan CVE-2019-3705 sampai di-flash 2.92) atau **iDRAC6 Enterprise** (tambah
+port dedicated + vFlash). Keduanya sudah langka; harga/ketersediaan perlu dicek, pemasangan butuh
+akses fisik, dan update firmware-nya kemungkinan tetap lewat DOS.
+
 ### 7.3 Rencana lanjutan (6 November 2026)
 
-> **Status:** iDRAC6 menjawab ICMP di `192.168.2.28`, tetapi web server/SSH/RMCP+ mati (§7.2g).
-> **Langkah 2 belum bisa dijalankan lewat web UI.** Lakukan AC power cycle dengan drain dulu; bila
-> layanan tetap mati, flashing dilakukan offline via media DOS/USB (Langkah 2b).
+> **Status v9:** kartu **iDRAC6 Express tidak terpasang** (§7.2h) → tidak ada web UI, tidak ada
+> RMCP+/SOL, dan alamat `.27/.28` **bukan** jalur manajemen. Rencana lama (AC power cycle → web UI →
+> unggah `firmimg.d6`) **tidak berlaku**. Dua jalur yang tersisa:
+> **(A) tanpa kartu** — BMC 1.80 → 2.92 lewat DUP in-band / media DOS (Langkah 2b), OOB diganti WoL +
+> monitoring + UPS; **(B) pasang kartu** dulu (Express/Enterprise bekas), baru Langkah 2 bisa dipakai.
 
 **Langkah 1 — konsol, ±2 menit.** Reboot, tekan **Ctrl-E** saat POST masuk ke *iDRAC6 configuration*:
 
@@ -719,7 +761,7 @@ IPv4 + DHCP, IP `0.0.0.0`, firmware **1.80**. Dampak produksi: **nol** — 25 co
    IPMI-over-LAN tidak ada, walau IPMI in-band tetap jalan.
 4. Bila tetap mati: *Reset to Defaults* dari Ctrl-E, konfigurasi ulang, lalu `ipmitool mc reset cold`.
 
-**Langkah 2 — flashing (setelah web UI hidup).**
+**Langkah 2 — flashing lewat web UI (HANYA bila kartu iDRAC6 Express terpasang).**
 
 1. Buka `https://192.168.2.27` (browser lama/IE mode atau `curl` TLS 1.0), login `root`.
 2. *iDRAC Settings → Update* → unggah `firmimg_1.85.d6` → tunggu reboot iDRAC (±5–10 menit, host
@@ -727,6 +769,16 @@ IPv4 + DHCP, IP `0.0.0.0`, firmware **1.80**. Dampak produksi: **nol** — 25 co
 3. Verifikasi: `sudo ipmitool mc info | grep Firmware` → **1.85**.
 4. Ulangi untuk `firmimg_2.92.d6` → verifikasi **2.92**.
 5. Jangan pernah downgrade di bawah 1.80 (unit eMMC); jangan cabut daya saat flashing.
+
+**Langkah 2b — flashing tanpa kartu (jalur yang berlaku sekarang), ±15–30 menit + akses fisik.**
+
+1. Siapkan USB bootable **DOS** (FreeDOS) + `firmimg_1.85.d6` dan `firmimg_2.92.d6`, atau pakai DUP
+   `ESM_Firmware_*_LN32_*` in-band (butuh `rpm` + loader i386 — sengaja tidak dipasang di produksi).
+2. Jadwalkan downtime; shutdown rapi (`docker compose stop` per stack), lalu boot dari USB.
+3. Flash **1.85** lebih dulu, biarkan BMC reboot (±5–10 menit, host tidak ikut reboot), verifikasi
+   `sudo ipmitool mc info | grep -i firmware` → **1.85**.
+4. Ulangi untuk **2.92**. Jangan cabut daya saat flashing; jangan downgrade di bawah 1.80 (unit eMMC).
+5. Catat hasil di §7.2 dan perbarui tabel status §1.3.
 
 **Langkah 3 — bila NIC tetap tidak bisa dihidupkan.** Upgrade tetap mungkin tanpa jaringan:
 
@@ -749,7 +801,9 @@ IPv4 + DHCP, IP `0.0.0.0`, firmware **1.80**. Dampak produksi: **nol** — 25 co
 | 6 | Konversi karaoke NTFS → ext4/XFS, pasang UPS | Rp0–1,5 jt | 🟡 Keandalan | ⏳ Belum |
 | 7 | Pindahkan `opencode`/Chrome dari host NAS | Rp0 | 🟡 ±170 MB RAM | ⏳ Belum |
 | 8 | ~~Upgrade BIOS 1.3.1 → 2.10.0~~ | Rp0 | ✅ Selesai 5-Nov-2026 | ✅ **Selesai** |
-| 9 | Upgrade BMC/iDRAC6 1.80 → 1.85 → 2.92 | Rp0 | 🟡 Keamanan (CVE-2019-3705) + syarat CPU v2 | ⏳ **Siap** — OOB hidup, paket siap (§7.3) |
+| 9 | Upgrade BMC 1.80 → 1.85 → 2.92 (jalur in-band/DOS) | Rp0 | 🟡 Syarat CPU v2 | ⏳ **Terblokir jalur web** — kartu iDRAC6 tidak ada (§7.2h, §7.3 Langkah 2b) |
+| 10 | (Opsional) Pasang kartu iDRAC6 Express/Enterprise agar OOB hidup | cek pasar bekas | 🟡 Remote management | ⏳ Keputusan |
+| 11 | Aktifkan Wake-on-LAN (`ethtool -s eno1 wol g` + BIOS) sebagai pengganti power-on jarak jauh | Rp0 | 🟡 Mitigasi tanpa iDRAC | ⏳ Belum |
 
 ---
 
@@ -763,8 +817,11 @@ IPv4 + DHCP, IP `0.0.0.0`, firmware **1.80**. Dampak produksi: **nol** — 25 co
 - Dukungan CPU E3-1200 **v2** (Ivy Bridge) mengacu pada *Dell R210 II Technical Guide* serta halaman
   driver Dell; **belum diuji pada unit ini** (CPU masih E3-1220 v1).
 - Audit awal (3-Nov-2026) bersifat **read-only**. Perubahan susulan yang dieksekusi:
-  BIOS → 2.10.0 (§7.1) dan pengaturan kanal LAN iDRAC (§7.2) — tidak ada data pengguna maupun
+  BIOS → 2.10.0 (§7.1) dan pengaturan kanal LAN BMC (§7.2) — tidak ada data pengguna maupun
   konfigurasi layanan yang diubah.
+- **Verifikasi fisik 6-Nov-2026:** kartu iDRAC6 Express **tidak terpasang** (§7.2h). Setelan kanal
+  LAN BMC yang diubah di §7.2 tidak berefek tanpa kartu; seluruh klaim OOB pada v5–v8 dicabut dan
+  tidak boleh dipakai sebagai asumsi perencanaan.
 - Flash BIOS/BMC **tanpa cadangan**: board R210 II tidak mendukung recovery setelah flash gagal.
   Siapkan UPS; hentikan pekerjaan bila tegangan tidak stabil.
 - `ipmitool sel list` pada firmware 1.80 bisa menggantung → selalu bungkus dengan `timeout`.
@@ -845,3 +902,4 @@ sudo tcpdump -i eno1 -n -e ether host d0:67:e5:f4:0a:66
 | v6 | 6-Nov-2026 | Tambah §7.2f: iDRAC6 **online** di `192.168.2.27` (ping 4/4 dari laptop), `IPMI Over LAN = On`; jelaskan bahwa uji OOB dari host pada NIC *shared* selalu negatif sehingga klaim “0 paket” dan “NC-SI gagal” dicabut |
 | v7 | 6-Nov-2026 | Tambah §7.2g: ICMP hidup tetapi TCP 80/443/22/5900 ditolak dan RMCP+ bisu; cold reset ×2 dan pemindahan IP membuktikan penjawab ping adalah iDRAC; web UI belum bisa dipakai sehingga jalur flashing bergeser ke AC power cycle / DUP DOS, dan alamat sementara static `192.168.2.28` |
 | v8 | 6-Nov-2026 | AC power cycle + drain dan password `root` baru **tidak** menyembuhkan; dicatat bahwa semua metode update menitipkan job ke layanan iDRAC yang mati, sehingga perbaikan harus fisik (factory reset Ctrl-E → reseat kartu → ganti kartu) |
+| v9 | 6-Nov-2026 | **Koreksi besar:** verifikasi fisik pemilik server — kartu **iDRAC6 Express tidak terpasang**; §7.2e–g dicabut (F10/USC & `Active LOM` bukan bukti, ICMP `.27/.28` bukan iDRAC), status OOB jadi 🔴, flashing pindah ke jalur in-band/DOS (§7.3 Langkah 2b), tambah §7.2h, tindakan WoL, dan §1.1/§1.3/§3.1/§3.6/§4.5/§5.4/§8/§9 disesuaikan |
