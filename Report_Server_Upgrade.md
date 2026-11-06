@@ -8,7 +8,7 @@
 | **Audit awal** | 3 November 2026, 16:29–16:5x WIB (read-only) |
 | **Pelaksanaan** | 5–6 November 2026 — BIOS **selesai**; BMC/iDRAC6 **dalam proses** (menunggu konfirmasi kartu) |
 | **Status server** | Produksi aktif, 25 container berjalan, 0 `unhealthy` |
-| **Revisi dokumen** | v7 — 6 November 2026 (iDRAC ICMP hidup tetapi **semua layanan mati**; web UI belum bisa dipakai) |
+| **Revisi dokumen** | v8 — 6 November 2026 (layanan iDRAC mati permanen; perbaikan harus fisik, jalur flash software tertutup) |
 
 ## Daftar Isi
 
@@ -680,6 +680,17 @@ Urutan perbaikan yang berlaku sekarang:
 `192.168.2.27`. Kembalikan dengan `sudo ipmitool lan set 1 ipsrc dhcp` (alamat akan mengikuti DHCP
 router).
 
+**Pembaruan 6-Nov-2026 (sore).** Password `root` iDRAC diset ulang dari Ctrl-E, lalu host menjalani
+AC power cycle penuh + *drain flea power*. Hasilnya **tidak berubah**: `.28` tetap menjawab ICMP,
+TCP 80/443/22/5900 tetap ditolak, RMCP+ tetap bisu. Host kembali sehat (Debian 13, 25 container
+`Up`, 0 unhealthy). Jadi kondisinya bukan *transient*: lapisan aplikasi iDRAC mati permanen.
+
+**Dampak pada rencana flashing.** Semua jalur update iDRAC6 — web UI, RACADM/TFTP, dan DUP
+Windows/Linux — **menitipkan *update job* ke layanan internal iDRAC**, yaitu layanan yang justru
+mati. Karena itu DUP `LN32` di dalam OS **bukan** alternatif yang bisa diandalkan pada kondisi ini.
+Perbaikan harus fisik: `Reset to Factory Defaults` di Ctrl-E → **reseat kartu iDRAC6 Express** → bila
+tetap mati, ganti kartunya. Flash 1.85 → 2.92 baru dijadwalkan setelah layanan hidup kembali.
+
 **Dampak bila tetap 1.80** (baru relevan begitu ada jalur jaringan):
 
 | Aspek | Konsekuensi |
@@ -833,3 +844,4 @@ sudo tcpdump -i eno1 -n -e ether host d0:67:e5:f4:0a:66
 | v5 | 6-Nov-2026 | **Koreksi §7.2e**: F10 dan `Active LOM = LOM1` membuktikan iDRAC6 Express terpasang; `192.168.2.27` adalah sisa statis, bukan lease; penyebab menyempit ke NC-SI/firmware, ditambah urutan perbaikan (AC power cycle → `IPMI Over LAN`/`Shared` → flash 1.85) |
 | v6 | 6-Nov-2026 | Tambah §7.2f: iDRAC6 **online** di `192.168.2.27` (ping 4/4 dari laptop), `IPMI Over LAN = On`; jelaskan bahwa uji OOB dari host pada NIC *shared* selalu negatif sehingga klaim “0 paket” dan “NC-SI gagal” dicabut |
 | v7 | 6-Nov-2026 | Tambah §7.2g: ICMP hidup tetapi TCP 80/443/22/5900 ditolak dan RMCP+ bisu; cold reset ×2 dan pemindahan IP membuktikan penjawab ping adalah iDRAC; web UI belum bisa dipakai sehingga jalur flashing bergeser ke AC power cycle / DUP DOS, dan alamat sementara static `192.168.2.28` |
+| v8 | 6-Nov-2026 | AC power cycle + drain dan password `root` baru **tidak** menyembuhkan; dicatat bahwa semua metode update menitipkan job ke layanan iDRAC yang mati, sehingga perbaikan harus fisik (factory reset Ctrl-E → reseat kartu → ganti kartu) |
