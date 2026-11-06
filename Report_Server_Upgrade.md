@@ -8,7 +8,7 @@
 | **Audit awal** | 3 November 2026, 16:29–16:5x WIB (read-only) |
 | **Pelaksanaan** | 5–6 November 2026 — BIOS **selesai**; BMC/iDRAC6 **dalam proses** (menunggu konfirmasi kartu) |
 | **Status server** | Produksi aktif, 25 container berjalan, 0 `unhealthy` |
-| **Revisi dokumen** | v5 — 6 November 2026 (koreksi: kartu Express terbukti ADA; masalah di jalur NC-SI) |
+| **Revisi dokumen** | v6 — 6 November 2026 (iDRAC6 **online** di `192.168.2.27`; batasan uji dari host dijelaskan) |
 
 ## Daftar Isi
 
@@ -32,7 +32,7 @@
 | Aspek | Kondisi | Status |
 |---|---|---|
 | Platform | Dell PowerEdge R210 II, BIOS **2.10.0 (2018)** — terpasang 5-Nov-2026 | 🔴 EOL, tidak bisa dikembangkan |
-| Manajemen OOB | iDRAC6 Express **terkonfirmasi ada**, BMC **1.80**, NIC `shared with failover lom2`, **nol lalu lintas jaringan** | 🔴 Jalur NC-SI belum jalan; perlu AC power cycle / cek BIOS (§7.2e) |
+| Manajemen OOB | iDRAC6 Express **online** di `192.168.2.27` (DHCP), BMC **1.80** | 🟢 OOB aktif; firmware 1.80 masih perlu di-upgrade (§7.3) |
 | CPU | Xeon E3-1220 4C/4T (2011) | 🟡 Cukup untuk beban sekarang, tanpa HT |
 | RAM | 3,9 GB untuk 25 container | 🔴 **Bottleneck utama** — swap terpakai 1,78 GB |
 | Storage | 3 disk tunggal, **tanpa RAID** | 🔴 **Nol redundansi** |
@@ -56,9 +56,9 @@ dipakai sekarang, ditambah **4× 8 TB RAIDZ1**. Anggaran ±**Rp33–37 juta**.
 | Pekerjaan | Status | Bukti / catatan |
 |---|---|---|
 | Upgrade BIOS 1.3.1 → 2.8.0 → 2.10.0 | ✅ Selesai 5-Nov-2026 | §7.1 — `dmidecode` 2.10.0, microcode `0x2f` |
-| Pemeriksaan & persiapan BMC/iDRAC6 → ≥ 1.85 | ✅ Selesai 6-Nov-2026 | §7.2e — kartu Express **ada**, LAN aktif, DHCP di-set, tetapi 0 paket keluar di eno1/eno2 |
-| Uji NC-SI | ⏳ Berjalan | Butuh **AC power cycle** (10 menit downtime) agar NIC Selection berlaku penuh |
-| Flash BMC 1.85 → 2.92 | ⏳ Menunggu NC-SI | Kanal upload tetap web UI; alternatif DUP `LN32` butuh i386 |
+| Pemeriksaan & persiapan BMC/iDRAC6 → ≥ 1.85 | ✅ Selesai 6-Nov-2026 | §7.2e–f — kartu Express ada, `iDRAC6 LAN` + `IPMI Over LAN` On, DHCP jalan |
+| Akses OOB (ping/web/RMCP+) | ✅ Terverifikasi 6-Nov-2026 | §7.2f — `192.168.2.27` menjawab ping 4/4 dari laptop; dari host selalu negatif (batasan NC-SI) |
+| Flash BMC 1.85 → 2.92 | ⏳ Siap dijalankan | Web UI hidup; paket + checksum siap (§7.3 Langkah 2) |
 | RAM 32 GB, backup, NAS baru | ⏳ Belum dimulai | §5, §6 |
 
 ---
@@ -103,7 +103,7 @@ pembacaan BMC in-band lewat `ipmitool` + `/dev/ipmi0` (KCS). Seluruh audit awal 
 | Service Tag | `9B6HC2S` |
 | Mainboard | Dell `09T7VV`, rev `A05` |
 | BIOS | **2.10.0, rilis 24 Mei 2018** — di-flash 5-Nov-2026 via DUP Dell `69VFP` (sebelumnya 1.3.1, 10-Nov-2011). Bukti: `dmidecode` `2.10.0` / `05/24/2018`, microcode `0x2f` |
-| BMC / iDRAC6 | **iDRAC6 Express terpasang**, firmware 1.80, IPMI 2.0, Device ID 32, MAC `d0:67:e5:f4:0a:66`. NIC mode `shared with failover lom2`; **tidak mengirim paket apa pun** di jaringan (§7.2e) |
+| BMC / iDRAC6 | **iDRAC6 Express terpasang & online**, firmware 1.80, IPMI 2.0, Device ID 32, MAC `d0:67:e5:f4:0a:66`. NIC mode `shared with failover lom2`, IP `192.168.2.27` (DHCP) — hanya dapat dijangkau dari host lain (§7.2f) |
 
 ### 3.2 Prosesor
 
@@ -196,8 +196,9 @@ NIC: **Broadcom NetXtreme II BCM5716** (2 port GbE). Tidak ada 2,5 GbE / 10 GbE 
 Port publik terbuka: 22, 80, 443, 3478 (TURN), 5000, 8443, 8444, 8445, 8446.
 Port lokal: 3001, 3307, 5001, 43741, 49374.
 
-> Catatan BMC: modul **Express terkonfirmasi terpasang** (6-Nov-2026) tetapi tidak punya port
-> dedicated; jalurnya NIC *shared* di LOM1, yang saat ini belum meneruskan lalu lintas (§7.2e).
+> Catatan BMC: modul **Express terkonfirmasi terpasang** dan **online** (6-Nov-2026) tetapi tidak
+> punya port dedicated; jalurnya NIC *shared* di LOM1, sehingga BMC hanya bisa dijangkau dari host
+> lain di LAN — bukan dari server itu sendiri (§7.2f).
 > MAC `d0:67:e5:f4:0a:66` saat ini tidak terlihat di segmen mana pun (§7.2).
 
 ### 3.7 Beban kerja (25 container)
@@ -497,13 +498,14 @@ Catatan operasional:
 BIOS ≥ 2.0.5 (✅ 2.10.0) **dan BMC ≥ 1.85** (belum). Jalur dipilih **bertahap** karena rilis Dell
 hanya mendokumentasikan upgrade dari versi tepat sebelumnya, dan unit ini memakai eMMC.
 
-**Status akhir (6-Nov-2026): firmware BELUM di-flash.** Pemeriksaan dan persiapan selesai, dan kartu
-**iDRAC6 Express terbukti terpasang** (F10 *System Services* dapat diakses). Namun BMC masih tidak
-mengirim satu frame pun ke jaringan, jadi flashing via web UI belum mungkin (lihat §7.2e).
+**Status akhir (6-Nov-2026): iDRAC6 ONLINE, firmware masih 1.80.** BMC menjawab di `192.168.2.27`
+(ping 4/4 dari laptop), dengan `iDRAC6 LAN = On` dan `IPMI Over LAN = On`. Flashing 1.85 → 2.92 kini
+bisa dilakukan lewat web UI dan menjadi pekerjaan berikutnya (§7.3 Langkah 2).
 
-> Koreksi: versi v4 laporan ini sempat menyimpulkan modul Express kemungkinan tidak terpasang. Itu
-> **salah** — bukti penentu (akses F10 dan `Active LOM = LOM1` di Ctrl-E) baru diperoleh setelah
-> pemeriksaan fisik.
+> Dua koreksi berturut-turut selama diagnosis: **v4** menyimpulkan modul Express kemungkinan tidak
+> terpasang (**salah** — kartu ada, terbukti via F10 dan `Active LOM = LOM1`); **v5** menyimpulkan
+> jalur NC-SI gagal (**juga salah** — semua uji dilakukan dari host yang, pada NIC shared, memang
+> tidak bisa menjangkau BMC-nya sendiri; lihat §7.2f).
 
 #### a. Temuan firmware & paket
 
@@ -550,8 +552,9 @@ Catatan teknis: `iDRAC6_*_FW_IMG.exe` adalah PE dengan payload ZIP; `firmimg.d6`
 
 **Kesimpulan:** masalahnya bukan IP, routing, atau VLAN — **NIC BMC tidak mengirim satu frame pun**.
 Kandidat penyebab: kartu iDRAC6 Express tidak terpasang, opsi LAN dimatikan di BIOS (Ctrl-E), atau
-sideband NC-SI LOM1 tidak berjalan. Pemeriksaan fisik 6-Nov (§7.2e) **memastikan kartu terpasang**,
-sehingga penyebabnya menyempit ke jalur NC-SI / firmware.
+sideband NC-SI LOM1 tidak berjalan. **Seluruh kesimpulan paragraf ini dibatalkan oleh §7.2f** —
+BMC ternyata online; `tcpdump` di host memang tidak dapat melihat lalu lintas NC-SI, sehingga
+\"0 paket\" bukan bukti BMC diam.
 
 #### d. Kondisi yang ditinggalkan
 
@@ -565,7 +568,7 @@ sehingga penyebabnya menyempit ke jalur NC-SI / firmware.
 Dampak ke produksi: **nol**. `mc reset cold` hanya mereset iDRAC, bukan host — uptime host tetap,
 25 container berjalan, 0 `unhealthy`.
 
-#### e. Pemeriksaan ulang 6 November 2026 — kartu Express ADA, jalur NC-SI belum jalan
+#### e. Pemeriksaan ulang 6 November 2026 — kartu Express ADA; uji dari host tidak sah
 
 Tindakan di sisi server: BMC di-reset, kanal LAN diaktifkan, IP diset **DHCP**, lalu lewat **Ctrl-E**
 NIC Selection diubah ke **`shared with failover lom2`** (VLAN disabled, IPv4 enabled, DHCP),
@@ -593,19 +596,54 @@ port dan kabel sudah benar, jadi ini bukan salah colok.
 benar sebagai observasi, tetapi **bukan** bukti ketiadaan kartu — `fru list`/SMBIOS pada 11G tidak
 melaporkan modul Express, dan mode *dedicated* hanya ada pada Enterprise.
 
-Kandidat penyebab sekarang, berurut kemungkinan:
+Hipotesis yang sempat diuji berurutan: NC-SI belum ter-init, `IPMI Over LAN` mati, bug shared NIC
+1.80, dan mode *failover*. **Tidak satu pun menjadi penyebab** — `IPMI Over LAN` ternyata sudah `On`
+(dikonfirmasi di Ctrl-E) dan BMC menjawab dari host lain tanpa perubahan konfigurasi apa pun.
 
-1. **NC-SI belum ter-init ulang.** Perubahan NIC Selection di Ctrl-E umumnya baru berlaku penuh
-   setelah **AC power cycle** (kedua kabel daya dilepas ±60 dtk), bukan hanya `mc reset cold`.
-2. **`IPMI Over LAN` = Off** di Ctrl-E — DHCP tetap bisa jalan, RMCP+ tidak; belum dikonfirmasi.
-3. **Bug/perilaku shared NIC pada firmware 1.80** — 1.85 & 2.92 memuat perbaikan di area ini.
-4. Mode *failover*: kembalikan ke **`Shared`** polos (LOM1 link 1 Gb) untuk menghapus variabel.
+**Kesimpulan §7.2e (dicabut).** Seluruh pengukuran di tabel ini dilakukan **dari host itu sendiri**,
+dan itu titik uji yang salah pada NIC *shared*: frame yang dikirim host tidak pernah di-loopback ke
+jalur NC-SI, sehingga host **tidak akan pernah** bisa menjangkau BMC-nya sendiri. Lihat §7.2f.
 
-**Kesimpulan.** Kartu Express sehat dan manajemen sudah dikonfigurasi benar; yang gagal spesifik
-jalur **sideband NC-SI** BMC → LOM1, sehingga DHCP tidak pernah benar-benar berjalan. Urutan
-perbaikan: **AC power cycle** → bila masih bisu, set `IPMI Over LAN = On` dan NIC `Shared` (tanpa
-failover) lalu AC cycle lagi → bila tetap bisu, flash **1.85** lewat media DOS/USB (DUP `LN32` butuh
-i386) dan uji ulang. Selama itu, BMC tetap berguna in-band (sensor, SEL, `power` dari OS).
+#### f. Hasil akhir 6 November 2026 — iDRAC6 online
+
+Uji penentu dijalankan dari **laptop Windows** di jaringan yang sama, bukan dari server:
+
+```text
+Pinging 192.168.2.27 with 32 bytes of data:
+Reply from 192.168.2.27: bytes=32 time=5ms  TTL=64
+Reply from 192.168.2.27: bytes=32 time<1ms TTL=64
+Reply from 192.168.2.27: bytes=32 time<1ms TTL=64
+Reply from 192.168.2.27: bytes=32 time<1ms TTL=64
+Packets: Sent = 4, Received = 4, Lost = 0 (0% loss)
+```
+
+Konfigurasi Ctrl-E terkonfirmasi: **`iDRAC6 LAN = On`**, **`IPMI Over LAN = On`**, `NIC Selection =
+Shared with Failover LOM2`, `Active LOM = LOM1`, VLAN disabled, IPv4 enabled, IP Address Source
+DHCP.
+
+| Uji | Dari host (tidak sah) | Dari laptop (sah) |
+|---|---|---|
+| Ping `192.168.2.27` | 100% loss, ARP `INCOMPLETE` | **4/4, TTL 64** |
+| RMCP+ `ipmitool -I lanplus` | gagal | belum diuji |
+| `tcpdump` eno1/eno2 | 0 paket dari MAC BMC | — |
+
+**Mengapa uji dari host selalu negatif.** Pada mode NIC *shared*, BMC memakai jalur **NC-SI** di
+chip NIC: frame dari jaringan diteruskan NIC ke BMC dan **tidak** diteruskan ke kernel host,
+sedangkan frame yang dikirim host tidak di-loopback ke jalur NC-SI. Akibatnya:
+
+- `ping`/`arping`/`curl`/`ipmitool -I lanplus` **dari server itu sendiri** ke BMC-nya selalu gagal —
+  ini perilaku normal, bukan kerusakan.
+- `tcpdump` di host **tidak** bisa melihat lalu lintas BMC, sehingga kesimpulan “0 paket = BMC diam”
+  pada §7.2c dan §7.2e **tidak sah**.
+- Verifikasi OOB harus dari perangkat lain di LAN (laptop/workstation), atau lewat counter switch.
+
+**Status.** iDRAC6 Express **aktif dan dapat dijangkau**: DHCP berjalan, web UI + RMCP+ tersedia di
+`192.168.2.27` (MAC `d0:67:e5:f4:0a:66`). Sensor, SEL, SOL, dan remote console kini bisa dipakai;
+satu-satunya risiko tersisa adalah firmware **1.80** (TLS 1.0, CVE-2019-3705) → lanjut §7.3
+Langkah 2.
+
+Catatan keamanan segera: ganti password `root` bila masih default, dan batasi akses BMC ke subnet
+manajemen sebelum menunda upgrade.
 
 **Dampak bila tetap 1.80** (baru relevan begitu ada jalur jaringan):
 
@@ -623,9 +661,8 @@ IPv4 + DHCP, IP `0.0.0.0`, firmware **1.80**. Dampak produksi: **nol** — 25 co
 
 ### 7.3 Rencana lanjutan (6 November 2026)
 
-> **Status:** reset + LAN On + DHCP + NIC `shared with failover lom2` sudah dilakukan, dan kartu
-> Express **terkonfirmasi ada** (§7.2e). Sisa pekerjaan: AC power cycle untuk memicu NC-SI, lalu
-> flashing bila web UI sudah hidup.
+> **Status:** iDRAC6 sudah **online** di `192.168.2.27` (§7.2f) — Langkah 1 (konsol) selesai dan
+> tidak perlu diulang. Lanjut langsung ke **Langkah 2** (flashing lewat web UI).
 
 **Langkah 1 — konsol, ±2 menit.** Reboot, tekan **Ctrl-E** saat POST masuk ke *iDRAC6 configuration*:
 
@@ -665,7 +702,7 @@ IPv4 + DHCP, IP `0.0.0.0`, firmware **1.80**. Dampak produksi: **nol** — 25 co
 | 6 | Konversi karaoke NTFS → ext4/XFS, pasang UPS | Rp0–1,5 jt | 🟡 Keandalan | ⏳ Belum |
 | 7 | Pindahkan `opencode`/Chrome dari host NAS | Rp0 | 🟡 ±170 MB RAM | ⏳ Belum |
 | 8 | ~~Upgrade BIOS 1.3.1 → 2.10.0~~ | Rp0 | ✅ Selesai 5-Nov-2026 | ✅ **Selesai** |
-| 9 | Upgrade BMC/iDRAC6 1.80 → 1.85 → 2.92 | Rp0 | 🟡 Syarat CPU v2 + OOB | ⏳ **Menunggu NC-SI** — kartu ada, jaringan belum hidup (§7.2e) |
+| 9 | Upgrade BMC/iDRAC6 1.80 → 1.85 → 2.92 | Rp0 | 🟡 Keamanan (CVE-2019-3705) + syarat CPU v2 | ⏳ **Siap** — OOB hidup, paket siap (§7.3) |
 
 ---
 
@@ -758,3 +795,4 @@ sudo tcpdump -i eno1 -n -e ether host d0:67:e5:f4:0a:66
 | v3 | 5-Nov-2026 | Restrukturisasi dokumen (10 bagian, daftar isi, tabel status); tambah §7.2–7.3 BMC/iDRAC6; perbarui inventaris, diagnosis OOB, tabel tindakan, lampiran |
 | v4 | 6-Nov-2026 | Tambah §7.2e: hasil pemeriksaan ulang BMC setelah reset/LAN On/DHCP (0 paket di kabel), bukti indikasi modul Express tidak terpasang, dan dampak bila tetap 1.80; status §1.3, inventaris, §8, dan §7.3 disesuaikan |
 | v5 | 6-Nov-2026 | **Koreksi §7.2e**: F10 dan `Active LOM = LOM1` membuktikan iDRAC6 Express terpasang; `192.168.2.27` adalah sisa statis, bukan lease; penyebab menyempit ke NC-SI/firmware, ditambah urutan perbaikan (AC power cycle → `IPMI Over LAN`/`Shared` → flash 1.85) |
+| v6 | 6-Nov-2026 | Tambah §7.2f: iDRAC6 **online** di `192.168.2.27` (ping 4/4 dari laptop), `IPMI Over LAN = On`; jelaskan bahwa uji OOB dari host pada NIC *shared* selalu negatif sehingga klaim “0 paket” dan “NC-SI gagal” dicabut |
