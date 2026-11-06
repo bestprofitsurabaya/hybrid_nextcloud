@@ -8,7 +8,7 @@
 | **Audit awal** | 3 November 2026, 16:29–16:5x WIB (read-only) |
 | **Pelaksanaan** | 5–6 November 2026 — BIOS **selesai**; BMC/iDRAC6 **dalam proses** (menunggu konfirmasi kartu) |
 | **Status server** | Produksi aktif, 25 container berjalan, 0 `unhealthy` |
-| **Revisi dokumen** | v6 — 6 November 2026 (iDRAC6 **online** di `192.168.2.27`; batasan uji dari host dijelaskan) |
+| **Revisi dokumen** | v7 — 6 November 2026 (iDRAC ICMP hidup tetapi **semua layanan mati**; web UI belum bisa dipakai) |
 
 ## Daftar Isi
 
@@ -32,7 +32,7 @@
 | Aspek | Kondisi | Status |
 |---|---|---|
 | Platform | Dell PowerEdge R210 II, BIOS **2.10.0 (2018)** — terpasang 5-Nov-2026 | 🔴 EOL, tidak bisa dikembangkan |
-| Manajemen OOB | iDRAC6 Express **online** di `192.168.2.27` (DHCP), BMC **1.80** | 🟢 OOB aktif; firmware 1.80 masih perlu di-upgrade (§7.3) |
+| Manajemen OOB | iDRAC6 Express, BMC **1.80**, `192.168.2.28` (static) — hanya ICMP yang menjawab | 🟡 Layanan iDRAC (web/SSH/RMCP+) mati; perlu AC power cycle (§7.2g) |
 | CPU | Xeon E3-1220 4C/4T (2011) | 🟡 Cukup untuk beban sekarang, tanpa HT |
 | RAM | 3,9 GB untuk 25 container | 🔴 **Bottleneck utama** — swap terpakai 1,78 GB |
 | Storage | 3 disk tunggal, **tanpa RAID** | 🔴 **Nol redundansi** |
@@ -57,7 +57,7 @@ dipakai sekarang, ditambah **4× 8 TB RAIDZ1**. Anggaran ±**Rp33–37 juta**.
 |---|---|---|
 | Upgrade BIOS 1.3.1 → 2.8.0 → 2.10.0 | ✅ Selesai 5-Nov-2026 | §7.1 — `dmidecode` 2.10.0, microcode `0x2f` |
 | Pemeriksaan & persiapan BMC/iDRAC6 → ≥ 1.85 | ✅ Selesai 6-Nov-2026 | §7.2e–f — kartu Express ada, `iDRAC6 LAN` + `IPMI Over LAN` On, DHCP jalan |
-| Akses OOB (ping/web/RMCP+) | ✅ Terverifikasi 6-Nov-2026 | §7.2f — `192.168.2.27` menjawab ping 4/4 dari laptop; dari host selalu negatif (batasan NC-SI) |
+| Akses OOB (ping/web/RMCP+) | 🔴 ICMP hidup, layanan mati | §7.2g — ping 14/14 dari laptop/WSL, tetapi TCP 80/443/22/5900 ditolak dan RMCP+ bisu |
 | Flash BMC 1.85 → 2.92 | ⏳ Siap dijalankan | Web UI hidup; paket + checksum siap (§7.3 Langkah 2) |
 | RAM 32 GB, backup, NAS baru | ⏳ Belum dimulai | §5, §6 |
 
@@ -645,6 +645,41 @@ Langkah 2.
 Catatan keamanan segera: ganti password `root` bila masih default, dan batasi akses BMC ke subnet
 manajemen sebelum menunda upgrade.
 
+#### g. 6 November 2026 (lanjutan) — ICMP hidup, semua layanan iDRAC mati
+
+Setelah `iDRAC6 LAN = On` dan `IPMI Over LAN = On` dikonfirmasi, diuji ulang dari luar host
+(laptop, WSL, dan host ketiga yang ter-routing ke LAN):
+
+| Uji | Hasil |
+|---|---|
+| `ping 192.168.2.27` dari laptop / WSL | 4/4 TTL 64 / 14/14 TTL 63 |
+| TCP 80, 443, 22, 5900 | **connection refused** (RST) di semua port |
+| RMCP+ *Get Channel Auth Capabilities*, UDP 623 | **tanpa balasan** |
+| `ipmitool mc reset cold` (in-band; host tidak reboot) | BMC kembali ± 105 s, fw tetap 1.80 — layanan tetap mati |
+| Pindah ke static `192.168.2.28` + cold reset | ICMP ikut pindah ke `.28` (3/3); `.27` mati → penjawab ping **adalah iDRAC**, bukan bentrok IP |
+| `ip neigh` host untuk alamat BMC | `FAILED` (normal: NC-SI tidak menjawab ARP dari host sendiri) |
+
+**Kesimpulan.** Stack jaringan/iDRAC Linux hidup (ARP+ICMP+DHCP/static berjalan), tetapi lapisan
+aplikasinya (web server, SSH, remote console, IPMI-over-LAN) **tidak berjalan**. Ini menjelaskan
+gejala “ping berhasil tapi browser unreachable” tanpa perlu menyalahkan TLS, firewall, atau IP
+conflict.
+
+**Dampak.** Flashing lewat web UI **belum mungkin** karena tidak ada web server yang bisa dibuka.
+Urutan perbaikan yang berlaku sekarang:
+
+1. **AC power cycle dengan drain** — cabut **kedua** kabel PSU, tahan tombol power ± 10 dtk, tunggu
+   60–120 dtk, pasang kembali. `mc reset cold` hanya merestart OS BMC, bukan mematikan daya DRAC,
+   sehingga tidak menyembuhkan kondisi ini.
+2. Bila layanan tetap mati: **flash offline lewat media DOS/USB** memakai DUP `LN32`
+   (`firmimg_1.85.d6`), lalu sesi DOS kedua untuk `firmimg_2.92.d6`. Jalur ini memakai KCS yang
+   terbukti masih berfungsi, jadi tidak bergantung pada web server.
+3. Verifikasi selalu bisa dilakukan in-band: `sudo ipmitool mc info` dan `ipmitool lan print 1`.
+
+**Perubahan konfigurasi saat diagnosis** (dapat dikembalikan):
+`IP Address Source = Static`, `192.168.2.28/23`, gateway `192.168.2.1` — sebelumnya DHCP
+`192.168.2.27`. Kembalikan dengan `sudo ipmitool lan set 1 ipsrc dhcp` (alamat akan mengikuti DHCP
+router).
+
 **Dampak bila tetap 1.80** (baru relevan begitu ada jalur jaringan):
 
 | Aspek | Konsekuensi |
@@ -661,8 +696,9 @@ IPv4 + DHCP, IP `0.0.0.0`, firmware **1.80**. Dampak produksi: **nol** — 25 co
 
 ### 7.3 Rencana lanjutan (6 November 2026)
 
-> **Status:** iDRAC6 sudah **online** di `192.168.2.27` (§7.2f) — Langkah 1 (konsol) selesai dan
-> tidak perlu diulang. Lanjut langsung ke **Langkah 2** (flashing lewat web UI).
+> **Status:** iDRAC6 menjawab ICMP di `192.168.2.28`, tetapi web server/SSH/RMCP+ mati (§7.2g).
+> **Langkah 2 belum bisa dijalankan lewat web UI.** Lakukan AC power cycle dengan drain dulu; bila
+> layanan tetap mati, flashing dilakukan offline via media DOS/USB (Langkah 2b).
 
 **Langkah 1 — konsol, ±2 menit.** Reboot, tekan **Ctrl-E** saat POST masuk ke *iDRAC6 configuration*:
 
@@ -796,3 +832,4 @@ sudo tcpdump -i eno1 -n -e ether host d0:67:e5:f4:0a:66
 | v4 | 6-Nov-2026 | Tambah §7.2e: hasil pemeriksaan ulang BMC setelah reset/LAN On/DHCP (0 paket di kabel), bukti indikasi modul Express tidak terpasang, dan dampak bila tetap 1.80; status §1.3, inventaris, §8, dan §7.3 disesuaikan |
 | v5 | 6-Nov-2026 | **Koreksi §7.2e**: F10 dan `Active LOM = LOM1` membuktikan iDRAC6 Express terpasang; `192.168.2.27` adalah sisa statis, bukan lease; penyebab menyempit ke NC-SI/firmware, ditambah urutan perbaikan (AC power cycle → `IPMI Over LAN`/`Shared` → flash 1.85) |
 | v6 | 6-Nov-2026 | Tambah §7.2f: iDRAC6 **online** di `192.168.2.27` (ping 4/4 dari laptop), `IPMI Over LAN = On`; jelaskan bahwa uji OOB dari host pada NIC *shared* selalu negatif sehingga klaim “0 paket” dan “NC-SI gagal” dicabut |
+| v7 | 6-Nov-2026 | Tambah §7.2g: ICMP hidup tetapi TCP 80/443/22/5900 ditolak dan RMCP+ bisu; cold reset ×2 dan pemindahan IP membuktikan penjawab ping adalah iDRAC; web UI belum bisa dipakai sehingga jalur flashing bergeser ke AC power cycle / DUP DOS, dan alamat sementara static `192.168.2.28` |
